@@ -30,7 +30,6 @@ import org.http4s.crypto.Hash
 import org.http4s.headers._
 
 import scala.concurrent.duration._
-import scala.util.Try
 
 /** Provides Digest Authentication from RFC 2617.
   */
@@ -230,6 +229,9 @@ object DigestAuth {
           m
       }
 
+  private def isHexDigits(s: String): Boolean =
+    s.nonEmpty && s.forall(c => Character.digit(c, 16) >= 0)
+
   private def checkAuthParams[F[_]: Hash, A](
       realm: String,
       store: AuthStore[F, A],
@@ -244,16 +246,16 @@ object DigestAuth {
       F.pure(BadParameters)
     } else {
       val method = req.method.toString
+      val nonce = params("nonce")
+      val nc = params("nc")
 
-      if (!params.get("realm").contains(realm)) {
+      if (!params.get("realm").contains(realm) || !isHexDigits(nc)) {
         F.pure(BadParameters)
       } else {
-        val nonce = params("nonce")
-        val nc = params("nc")
-        Try(java.lang.Long.parseLong(nc, 16)).toOption match {
-          case None => F.pure(BadParameters)
-          case Some(value) if value < 0 || value > Int.MaxValue => F.pure(BadNC)
-          case Some(value) =>
+        Either.catchOnly[NumberFormatException](java.lang.Long.parseLong(nc, 16)) match {
+          case Left(_) => F.pure(BadParameters)
+          case Right(value) if value > Int.MaxValue => F.pure(BadNC)
+          case Right(value) =>
             val count = value.toInt
             receiveNonce(nonce, count).flatMap {
               case NonceKeeper.StaleReply => F.pure(StaleNonce)

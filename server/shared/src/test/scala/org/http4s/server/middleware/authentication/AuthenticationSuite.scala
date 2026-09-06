@@ -374,9 +374,10 @@ class AuthenticationSuite extends Http4sSuite {
         response <- DigestUtil
           .computeResponse[IO](method, username, realm, password, uri, nonce, nc, cnonce, qop)
 
-        // "zz" does not parse, "ffffffff" is a legal 8LHEX count that does not
-        // fit in a signed Int, and "-1" parses but can never exceed the last one
-        badNcs = List("zz", "ffffffff", "-1")
+        // "zz" is not hex, "ffffffff" is a legal 8LHEX count that does not fit
+        // in a signed Int, "-1" and "+1" carry a sign 8LHEX does not allow, and
+        // seventeen digits overflow the Long the count is parsed into
+        badNcs = List("zz", "ffffffff", "-1", "+1", "1" * 17)
 
         result <- badNcs
           .parTraverse { badNc =>

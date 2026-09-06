@@ -28,6 +28,7 @@ import cats.effect.Sync
 import cats.syntax.all._
 import org.http4s.crypto.Hash
 import org.http4s.headers._
+import org.http4s.util.isHexDigits
 
 import scala.concurrent.duration._
 
@@ -229,8 +230,11 @@ object DigestAuth {
           m
       }
 
-  private def isHexDigits(s: String): Boolean =
-    s.nonEmpty && s.forall(c => Character.digit(c, 16) >= 0)
+  private val requiredParams =
+    Set("realm", "nonce", "nc", "username", "cnonce", "qop", "response")
+
+  private def hasRequiredParams(params: Map[String, String]): Boolean =
+    requiredParams.subsetOf(params.keySet)
 
   private def checkAuthParams[F[_]: Hash, A](
       realm: String,
@@ -240,9 +244,7 @@ object DigestAuth {
       paramsNel: NonEmptyList[(String, String)],
   )(implicit F: Monad[F]): F[AuthReply[A]] = {
     val params = paramsNel.toList.toMap
-    if (
-      !Set("realm", "nonce", "nc", "username", "cnonce", "qop", "response").subsetOf(params.keySet)
-    ) {
+    if (!hasRequiredParams(params)) {
       F.pure(BadParameters)
     } else {
       val method = req.method.toString
